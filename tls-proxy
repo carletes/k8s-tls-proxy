@@ -1,0 +1,71 @@
+#!/bin/bash
+
+TEMP=$(getopt \
+	   --long remote-host:,remote-port:,local-host:,local-port:,cert-file:,key-file:,ca-file: \
+	   -n tls-proxy \
+	   -o h:p:H:P:c:k: \
+	   -- "$@")
+if [ $? != 0 ] ; then
+    exit 1
+fi
+
+eval set -- "$TEMP"
+
+local_host="127.0.0.1"
+local_port="80"
+
+while true ; do
+    case "$1" in
+	--remote-host)
+	    remote_host="$2" ; shift 2 ;;
+	--remote-port)
+	    remote_port="$2" ; shift 2 ;;
+	--local-host)
+	    local_host="$2" ; shift 2 ;;
+	--local-port)
+	    local_port="$2" ; shift 2 ;;
+	--cert-file)
+	    cert_file="$2" ; shift 2 ;;
+	--key-file)
+	    key_file="$2" ; shift 2 ;;
+	--ca-file)
+	    ca_file="$2" ; shift 2 ;;
+	--)
+	    shift ; break ;;
+	*) echo "getopt error" ; exit 1 ;;
+    esac
+done
+
+echo "Forwarding http://$local_host:$local_port -> https://$remote_host:$remote_port"
+echo "Using TLS cert:    $cert_file"
+echo "Using TLS key:     $key_file"
+echo "Using TLS CA cert: $ca_file"
+
+echo "Starting nginx ..."
+
+conf_file="/etc/nginx-tls-proxy.conf"
+cat > $conf_file <<EOF
+daemon off;
+user nginx;
+worker_processes  1;
+
+error_log stderr warn;
+pid /var/run/nginx.pid;
+
+http {
+    access_log off;
+
+    server {
+        listen $local_host:$local_port;
+
+        location / {
+            proxy_pass https://$remote_host:$remote_port;
+            proxy_ssl_certificate $cert_file;
+            proxy_ssl_certificate_key $key_file;
+            proxy_ssl_trusted_certificate $ca_file;
+        }
+    }
+}
+EOF
+
+exec /usr/sbin/nginx -c $conf_file
