@@ -10,8 +10,36 @@ acts as a MITM proxy, offering a plain HTTP `etcd` endpoint.
 ## Usage
 
 If you have a TLS-enabled `etcd` endpoint at `https://1.2.3.4:2379`,
-for instance, then you could use the following YAML descriptor for the
-Kubernetes API server:
+for instance, then you could use the following YAML descriptor for the TLS
+proxy:
+
+    apiVersion: v1
+	kind: Pod
+    metadata:
+      name: k8s-tls
+      namespace: kube-system
+    spec:
+      hostNetwork: true
+      containers:
+        - name: tls-proxy
+		  image: carletes/k8s-tls-proxy
+		  command:
+		    - /tls-proxy
+			- --remote-host=1.2.3.4
+			- --remote-port=2379
+			- --local-host=127.0.0.1
+			- --local-port=2379
+			- --cert-file=/etc/kubernetes/ssl/node.pem
+			- --key-file=/etc/kubernetes/ssl/node-key.pem
+			- --ca-file=/etc/kubernetes/ssl/ca.pem
+	  volumes:
+          - hostPath:
+              path: /etc/kubernetes/ssl
+            name: ssl-certs-kubernetes
+
+
+Then you may use `http://127.0.0.1:2379` as your `etcd` endpoint in the
+Kubernetes API server pod definition:
 
     apiVersion: v1
 	kind: Pod
@@ -27,27 +55,9 @@ Kubernetes API server:
             - /hyperkube
             - apiserver
               - --etcd-servers="http://127.0.0.1:2379""
-			  [..]
-        - name: k8s-tls-proxy
-		  image: carletes/k8s-tls-proxy
-		  command:
-		    - /tls-proxy
-			- --remote-host=1.2.3.4
-			- --remote-port=2379
-			- --local-host=127.0.0.1
-			- --local-port=2379
-			- --cert-file=/etc/kubernetes/ssl/node.pem
-			- --key-file=/etc/kubernetes/ssl/node-key.pem
-			- --ca-file=/etc/kubernetes/ssl/ca.pem
-	  volumes:
-          - hostPath:
-              path: /etc/kubernetes/ssl
-            name: ssl-certs-kubernetes
-          - hostPath:
-              path: /usr/share/ca-certificates
-            name: ssl-certs-host
+			  # [..]
 
-Similarly, for the `podmaster` pods:
+Similarly, for the `podmaster` pod:
 
 	apiVersion: v1
     kind: Pod
@@ -70,15 +80,8 @@ Similarly, for the `podmaster` pods:
             - /podmaster
               - --key=controller
               - --etcd-servers="http://127.0.0.1:2379"
-			  [..]
-        - name: k8s-tls-proxy
-		  image: carletes/k8s-tls-proxy
-		  command:
-		    - /tls-proxy
-			- --remote-host=1.2.3.4
-			- --remote-port=2379
-			- --local-host=127.0.0.1
-			- --local-port=2379
-			- --cert-file=/etc/kubernetes/ssl/node.pem
-			- --key-file=/etc/kubernetes/ssl/node-key.pem
-			- --ca-file=/etc/kubernetes/ssl/ca.pem
+			  # [..]
+
+Note that you only need one TLS proxy pod for the master node, since both the
+TLS proxy pod and its Kubernetes clients (the API server and the podmaster)
+share the host's networking space.
