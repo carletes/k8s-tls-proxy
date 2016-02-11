@@ -52,6 +52,10 @@ worker_processes  1;
 error_log stderr warn;
 pid /var/run/nginx.pid;
 
+events {
+    worker_connections 1024;
+}
+
 http {
     access_log off;
 
